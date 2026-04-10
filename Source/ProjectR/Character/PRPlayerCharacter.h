@@ -4,7 +4,14 @@
 
 #include "CoreMinimal.h"
 #include "PRCharacterBase.h"
+#include "Net/UnrealNetwork.h"
 #include "PRPlayerCharacter.generated.h"
+
+class USpringArmComponent;
+class UCameraComponent;
+class UInputMappingContext;
+class UInputAction;
+struct FInputActionValue;
 
 UCLASS()
 class PROJECTR_API APRPlayerCharacter : public APRCharacterBase
@@ -12,23 +19,77 @@ class PROJECTR_API APRPlayerCharacter : public APRCharacterBase
 	GENERATED_BODY()
 
 public:
-	// Sets default values for this character's properties
 	APRPlayerCharacter();
 
-	// TODO: 구현
-	bool IsCrouching() const {return false; }
-	bool IsSprinting() const {return false; }
-	bool IsAiming() const {return false;}
-	float GetDesiredLookDirection() const {return 0.f;}
+	/** 멀티플레이어 변수 복제 설정 */
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	
+	/** 애니메이션 인스턴스에서 사용하는 게터 함수들 */                   
+	bool IsCrouching() const { return bIsCrouched; } 
+	bool IsSprinting() const { return bIsSprinting; } 
+	bool IsAiming() const { return bIsAiming; }       
+	
+	// 컨트롤 회전(카메라)과 캐릭터 정면 사이의 Yaw 차이를 반환 (Lean 및 절차적 애니메이션용)
+	float GetDesiredLookDirection() const;            
 	
 protected:
-	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
-
-public:
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
-
-	// Called to bind functionality to input
+	
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+	
+	/** 입력 처리 함수 */
+	void Move(const FInputActionValue& Value);
+	void Look(const FInputActionValue& Value);
+
+	/** 상태 변경 함수 (멀티플레이어 대응) */
+	void SprintStarted();
+	void SprintEnded();
+
+	UFUNCTION(Server, Reliable)
+	void Server_SetSprinting(bool bNewSprinting);
+
+	void AimStarted();
+	void AimEnded();
+
+	UFUNCTION(Server, Reliable)
+	void Server_SetAiming(bool bNewAiming);
+
+	void CrouchPressed();
+	
+	/** 컴포넌트 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
+	TObjectPtr<USpringArmComponent> CameraBoom;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
+	TObjectPtr<UCameraComponent> FollowCamera;
+
+	/** Enhanced Input 에셋 (블루프린트에서 할당) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputMappingContext> DefaultMappingContext;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> MoveAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> LookAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> DodgeAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> SprintAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> CrouchAction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	TObjectPtr<UInputAction> AimAction;
+
+private:
+	/** 복제되는 상태 변수 */
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Locomotion", meta = (AllowPrivateAccess = "true"))
+	bool bIsSprinting = false;
+
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "Locomotion", meta = (AllowPrivateAccess = "true"))
+	bool bIsAiming = false;
 };
